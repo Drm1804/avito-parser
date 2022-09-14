@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "@types/jest": "~27.5",
+    "@types/jsdom": "^20.0.0",
     "@types/node": "~16",
     "@typescript-eslint/eslint-plugin": "~5.26",
     "@typescript-eslint/parser": "~5.26",
@@ -36,6 +37,9 @@
   "author": "Alex Four",
   "license": "Apache-2.0",
   "dependencies": {
+    "axios": "^0.27.2",
+    "firebase": "^9.9.4",
+    "jsdom": "^20.0.0",
     "tslib": "~2.4"
   },
   "volta": {
