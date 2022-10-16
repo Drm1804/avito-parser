@@ -1,6 +1,6 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import { Database, getDatabase, set, ref, get, child } from "firebase/database";
+import { Database, getDatabase, set, ref, get, child, onChildAdded, onChildMoved, onChildRemoved, onChildChanged } from "firebase/database";
 import { conf } from '../../config.js'
 
 class DatabaseService {
@@ -30,9 +30,9 @@ class DatabaseService {
   }
 
 
-  getSavedAds(path: string): Promise<Collection<Ad>> {
+  getSavedAds(taskId: string): Promise<Collection<Ad>> {
     return new Promise((resolve, reject) => {
-      get(child(ref(this.db), path)).then((snapshot) => {
+      get(child(ref(this.db), 'ads/' + taskId)).then((snapshot) => {
         if (snapshot.exists()) {
           resolve(snapshot.val() || {})
         } else {
@@ -52,6 +52,34 @@ class DatabaseService {
         });
     })
   }
+
+  getTasks(): Promise<Collection<Task>> {
+    return new Promise((resolve, reject) => {
+      get(child(ref(this.db), 'tasks')).then((snapshot) => resolve(snapshot.val()))
+        .catch(err => {
+          reject(err)
+        })
+    })
+  }
+
+  subscribeToTaskChange() {
+    let activatePause = true;
+
+    return new Promise(resolve => {
+      onChildChanged(ref(this.db, 'tasks'), (sn) => resolve(sn.val()));
+      onChildMoved(ref(this.db, 'tasks'), (sn) => resolve(sn.val()));
+      onChildRemoved(ref(this.db, 'tasks'), (sn) => resolve(sn.val()));
+      onChildAdded(ref(this.db, 'tasks'), (sn) => {
+        setTimeout(() => {
+          activatePause = false;
+        })
+        if(!activatePause) {
+          resolve(sn.val())
+        }
+      });
+    })
+  }
+
 }
 
 
@@ -71,4 +99,12 @@ export interface Ad {
   title: string,
   price: number,
   url: string
+}
+
+export interface Task {
+  id: string,
+  cron: string,
+  query: string,
+  cities: string[],
+  category: string,
 }

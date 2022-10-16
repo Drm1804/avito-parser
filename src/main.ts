@@ -1,53 +1,54 @@
-import jsdom from "jsdom";
-const { JSDOM } = jsdom;
-import axios from 'axios';
-import db, { Ad, Collection } from './helpers/database.js';
-import { compareCollections, pause } from './helpers/utils.js';
+import { CronJob } from 'cron';
+import { Avito } from './helpers/avito.js';
+import db, { Task } from './helpers/database.js';
+import { pause } from './helpers/utils.js';
 
-(async () => {
-  await pause();
-  let html: string
-  try {
-    const resp = await axios.get('https://www.avito.ru/moskva/telefony?q=airtag&s=104', { responseType: 'document' })
-    html = resp.data;
+function createJob(task: Task): CronJob {
+  console.log('Создаю задачу ' + task.id);
 
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      console.log(error);
+  return new CronJob(task.cron, async () => {
+    const avito = new Avito(task);
+    console.log('Запускаю задачу ' + task.id);
 
-    } else {
-      console.log(error);
+    try {
+      const newIds = await avito.getAdsIds();
+
+      for (const id of newIds) {
+        await db.setNewAd(task.id, avito.updateAds[id]);
+        await pause(300);
+      }
+
+    } catch (err) {
+      console.error(err);
     }
-  }
 
-
-  const dom = new JSDOM(html);
-
-  const document = dom.window.document;
-
-  const items = document.querySelectorAll('[data-marker=item]')
-
-  const updateAds: Collection<Ad> = {};
-
-  items.forEach((node) => {
-    updateAds[node.id] = {
-      id: node.id,
-      title: node.querySelector('[itemprop=name]').textContent,
-      price: Number(node.querySelector('[itemprop=price]').getAttribute('content')),
-      url: node.querySelector('[itemprop=url]').getAttribute('href'),
-    }
   })
 
-  const savedAds = await db.getSavedAds('ads');
+}
 
-  const newIds = compareCollections(savedAds, updateAds);
 
-  for(const id of newIds) {
-    await db.setNewAd('ads', updateAds[id]);
-    await pause(300)
+async function run() {
+  const jobs = []; //для хранения cronJobs
+  await pause(5000);
+  let fullTasks = []; // для хранения задач, полученных из FB
+
+  try {
+    fullTasks = Object.values(await db.getTasks());
+    console.log('Получен список задач');
+  } catch (err) {
+    console.error(err);
   }
 
-  process.exit(1)
+  for (const task of fullTasks) {
+    const job = createJob(task);
+    job.start();
+    jobs.push(job);
+  }
 
-})()
+  db.subscribeToTaskChange().then(() => {
+    jobs.forEach((j: CronJob) => j.stop());
+    run();
+  })
+}
 
+run();
